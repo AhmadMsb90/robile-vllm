@@ -1,0 +1,26 @@
+# ROS 2 / colcon generated files
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ROS bags / large recorded data
+*.bag
+*.db3
+*.mcap
+*.db3-journal
+
+# ROS 2 / Gazebo generated files
+*.log
+
+# IDE / editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
