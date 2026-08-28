@@ -1,0 +1,2 @@
+#!/bin/bash
+exec /opt/ros_ml/bin/python -m robile_vlm_perception.yolo_node "$@"

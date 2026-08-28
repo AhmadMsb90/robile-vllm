@@ -16,11 +16,16 @@ find_package(rosidl_default_generators REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 
+
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PositionLabelled.msg"
   "msg/PositionLabelledArray.msg"
+  "msg/ObjectDetection.msg"
+  "msg/ObjectDetectionArray.msg"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
- )
+)
+
+
 
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()
