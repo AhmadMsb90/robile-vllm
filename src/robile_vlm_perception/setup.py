@@ -28,7 +28,9 @@ setup(
     ],
     entry_points={
         'console_scripts': [
-            'vlm_node = robile_vlm_perception.vlm_node:main',
+                'yolo_node = robile_vlm_perception.yolo_node:main',
+                'vlm_node = robile_vlm_perception.vlm_node:main',
+                'depth_target_node = robile_vlm_perception.depth_target_node:main',
         ],
     },
 )

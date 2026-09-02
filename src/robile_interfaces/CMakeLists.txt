@@ -22,6 +22,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/PositionLabelledArray.msg"
   "msg/ObjectDetection.msg"
   "msg/ObjectDetectionArray.msg"
+  "msg/VlmTarget.msg"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs
 )
 

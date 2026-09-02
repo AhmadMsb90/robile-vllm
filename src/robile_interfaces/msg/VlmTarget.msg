@@ -1,0 +1,9 @@
+std_msgs/Header header
+int32 target_id
+string target_class
+float32 confidence
+float32 x1
+float32 y1
+float32 x2
+float32 y2
+string reason
