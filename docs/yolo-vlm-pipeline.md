@@ -227,3 +227,346 @@ roi = depth[
     x1 + margin_x:x2 - margin_x + 1
 ]
 ```
+
+#### 4.3 Filtering Invalid Depth Measurements
+
+The raw depth image can contain invalid, infinite, or otherwise unusable measurements. The node therefore keeps only depth values satisfying:
+
+```python 
+np.isfinite(roi) & (roi > 0.1) & (roi < 100.0)
+```
+
+This removes:
+
+- NaN values
+- infinite values
+- values below the configured minimum depth
+- unrealistic values beyond the configured maximum range
+
+If no valid depth values remain, the target is rejected and a warning is generated.
+
+#### 4.4 Robust Depth Estimation
+
+The `target depth` is estimated from `all valid pixel`s in the `inner bounding-box region` rather than using only one pixel. The `median` is used:
+
+```python 
+z = float(np.median(valid_depth))
+```
+
+The `median` is selected because it is more `robust` to isolated erroneous measurements than a single center pixel or a simple extreme-value measurement. This is particularly useful around object `boundaries`, where some depth pixels may belong to the background.
+
+During testing, the `tightly concentrated depth distribution` within the object's bounding box confirmed that the `median` provided a `stable` target distance estimate.
+
+#### 4.5 Determining the Target Pixel
+
+The representative `image location` of the target is taken as the `center` of the selected `bounding box`:
+
+
+```python 
+u = (x1 + x2) / 2.0  # horizontal image coordinate
+v = (y1 + y2) / 2.0  # vertical image coordinate
+```
+
+#### 4.6 Using the RGB-D Camera Calibration
+
+The node obtains the `camera's intrinsic parameters` from the topic `/camera_front/depth/camera_info`.
+
+The relevant parameters are extracted from the ROS2 `CameraInfo` message:
+
+```python
+fx = self.latest_camera_info.k[0]
+fy = self.latest_camera_info.k[4]
+cx = self.latest_camera_info.k[2]
+cy = self.latest_camera_info.k[5]
+```
+For the configured 320 × 240 camera, the calibrated values obtained during runtime are approximately:
+```python
+fx = 190.681
+fy = 190.681
+cx = 160.5
+cy = 120.5
+```
+
+These intrinsic parameters are used to convert image coordinates and measured depth into metric 3D coordinates.
+
+#### 4.7 Back-Projecting the Pixel into 3D
+The selected pixel `(u, v)` and the` measured depth z` are `converted` into a `3D point` using the `pinhole-camera projection` equations:
+
+```python 
+x = (u - cx) * z / fx 
+y = (v - cy) * z / fy 
+z = z
+```
+The resulting coordinates are expressed in the` camera coordinate frame`:
+`camera_front_link`
+
+Thus, the pipeline convertes:
+
+```bash
+┌────────────────────────┐
+│    2D Bounding Box     │
+├────────────────────────┤         ┌────────────────────┐
+│   Depth Measurement    │  ─────► │ 3D Target Position │
+├────────────────────────┤         └────────────────────┘
+│   Camera Intrinsics    │
+└────────────────────────┘
+```
+As an example, an approximate camera-frame position produced by one verified target is as below:
+
+```bash
+x = -0.377 m
+y = -0.552 m
+z =  2.569 m
+```
+
+Which indicates that the selected `object` is approximately `2.57 m` away along the camera `depth axis`.
+
+#### 4.8 Creating the ROS2 3D Target Message
+
+The 3D result is stored in a standard ROS2 message : `geometry_msgs/msg/PointStamped`
+
+Initially, the point is set in the `camera_front_link` frame while retaining the timestamp from the original VLM/YOLO detection:
+
+```python 
+
+camera_point.header.stamp = msg.header.stamp
+camera_point.header.frame_id = 'camera_front_link'
+```
+
+The original timestamp is preserved so that the target position corresponds to a specific camera observation rather than an arbitrary later time.
+
+#### 4.9 TF2 Transformation toward the Navigation Frame
+
+The camera-frame point is subsequently transformed. The `depth node` maintains a TF2 buffer and listener:
+
+```python 
+self.tf_buffer = tf2_ros.Buffer() 
+self.tf_listener = tf2_ros.TransformListener( 
+    self.tf_buffer, 
+    self 
+)
+```
+
+The `target` is `transformed` directly from `camera_front_link` to `odom` using the `timestamp` associated with the target:
+
+```python 
+transform = self.tf_buffer.lookup_transform( 
+    'odom', 
+    'camera_front_link', 
+    camera_point.header.stamp, 
+    timeout=rclpy.duration.Duration(seconds=0.5) 
+)
+```
+The transformation is then applied with:
+
+
+```python 
+odom_point = do_transform_point(
+    camera_point,
+    transform
+)
+```
+The resulting message is populated in the `odom` frame while retaining the synchronized timestamp so that the final target position is expressed in a stable navigation frame:
+
+
+```python 
+odom_point.header.stamp = camera_point.header.stamp odom_point.header.frame_id = 'odom'
+```
+#### 4.10 Verified Transformation Chain
+
+The robot TF tree is verified to contain the following chain:
+```bash
+odom
+ └── base_footprint
+      └── base_link
+           └── camera_front_link
+```
+
+The` fixed camera mounting transform` was verified using the TF2 transform between `base_link` and `camera_front_link`:
+
+```bash
+ros2 run tf2_ros tf2_echo base_link camera_front_link
+
+At time 0.0 
+- Translation: [0.450, 0.000, 0.300] 
+- Rotation: in Quaternion [0.000, 0.000, 0.000, 1.000] 
+- Rotation: in RPY (radian) [0.000, 0.000, 0.000] 
+- Rotation: in RPY (degree) [0.000, 0.000, 0.000] 
+- Matrix: 
+1.000 0.000 0.000 0.450 
+0.000 1.000 0.000 0.000 
+0.000 0.000 1.000 0.300 
+0.000 0.000 0.000 1.000
+
+```
+The output indicates there is `only translation` between `base_link` and `camera_front_link`.
+
+```bash
+Translation: 
+x = 0.45 m 
+y = 0.00 m 
+z = 0.30 m
+```
+The complete target transformation is therefore handled by TF2:
+
+```bash
+┌───────────────────────┐
+│   camera_front_link   │
+└───────────┬───────────┘
+            │
+           TF2
+            │
+            ▼
+┌───────────────────────┐
+│       base_link       │
+└───────────┬───────────┘
+            │
+           TF2
+            │
+            ▼
+┌───────────────────────┐
+│         odom          │
+└───────────────────────┘
+```
+A complete runtime test produced the following target coordinates:
+
+Camera frame (`camera_front_link`):
+
+```bash
+x = -0.377 m
+y = -0.552 m
+z =  2.569 m
+```
+
+The `camera_front_link` frame is `attached` to the` RGB-D camera`. Its `origin` is located at the `camera's calibrated mounting position` on the robot. The coordinates are expressed relative to this camera frame:
+
+- `z` is the `camera;s optical/depth direction`, pointing `outward` from the camera into the scene.
+- `x` is the camera's `horizontal` direction.
+- `y` is the camera's `vertical` direction according to the ROS camera-frame convention.
+
+The point is first calculated from the image pixel and depth value using the camera intrinsics:
+
+```python 
+x = (u - cx) * z / fx
+y = (v - cy) * z / fy
+z = measured depth
+```
+
+The `camera-frame point` is then transformed into the `odom` frame using the `TF2` transform chain:
+
+```bash
+camera_front_link
+└── base_link
+    └── base_footprint
+        └── odom
+```
+
+**Note:** The `odom` frame is a `robot/world reference frame` maintained by the `robot's odometry system`. Its `origin` is established `when the odometry system starts`, and its `axes` remain `fixed` relative to that `local world frame`. The odom frame is not necessarily aligned with a global map or GPS frame, and its origin may drift over long distances because it is based on accumulated robot motion.
+
+As mentioned earlier, the verified `camera mounting` transform relative to `base_link` is:
+
+`camera_front_link` relative to `base_link`:
+
+```bash
+translation:
+x = 0.45 m
+y = 0.00 m
+z = 0.30 m
+
+rotation:
+identity
+```
+
+Therefore, in this configuration, the camera is mounted 0.45 m forward and 0.30 m above the robot's `base_link`, with no additional rotation relative to that frame. The remaining transformation from `base_link` through `base_footprint` to `odom` is provided by the robot's TF2/odometry system. Any robot orientation accumulated by odometry is included in this TF2 transformation.
+
+
+After applying the complete translation and rotation from camera_front_link to odom, the same example target (see above) was represented as:
+
+```bash
+Odom frame:
+x = 0.073 m
+y = -0.552 m
+z =  2.869 m
+```
+
+The transformed result was published on the topic : `/vlm/target_point` with
+
+```bash
+header:
+  frame_id: odom
+```
+#### 4.11 Final Result of the Depth Localization Stage
+
+The node therefore performs the complete conversion:
+
+```bash
+                    VLM-selected YOLO bounding box
+                                ↓               
+                    matching RGB-D depth frame  
+                                ↓               
+                    inner bounding-box depth region
+                                ↓               
+                        valid-depth filtering     
+                                ↓               
+                        median target depth      
+                                ↓               
+                        camera intrinsics       
+                                ↓               
+                    3D point in camera_front_link 
+                                ↓               
+                        TF2 transformation      
+                                ↓               
+                            3D point in odom       
+                                ↓               
+                        /vlm/target_point       
+```
+
+**Summary:**
+
+The /vlm/`target_point` topic outputs the 3D metric position of a selected object `in the odom` coordinate frame. For robot `navigation`, the `2D (x, y)` coordinates are used to generate movement `goals`, while the height (z) coordinate is kept strictly for 3D perception data.
+
+### 5. Final Verified Pipeline
+
+The complete perception pipeline is:
+
+```bash 
+RGB-D Camera
+      │
+      ├── RGB image ───────────────┐
+      │                            ▼
+      │                      YOLO detector
+      │                            │
+      │                            ▼
+      │                     /yolo/detections
+      │                            │
+      └────────────────────────────┼► Qwen2.5-VL
+                                   │
+                                   ▼
+                            /vlm/instruction
+                                   │
+                                   ▼
+                            target selection
+                                   │
+                                   ▼
+                              /vlm/target
+                                   │
+                                   ▼
+                              Depth image
+                                   │
+                                   ▼
+                         3D target estimation
+                                   │
+                                   ▼
+                         camera_front_link
+                                   │
+                                   ▼
+                                  TF2
+                                   │
+                                   ▼
+                                 odom
+                                   │
+                                   ▼
+                          /vlm/target_point
+```
+
+
