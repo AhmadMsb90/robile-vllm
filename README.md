@@ -7,3 +7,5 @@ Welcome to the project repository. Below are the links to the individual documen
 
 
 * [ROS 2 + Python ML Environment for YOLO Perception](enable-ros-yolo.md) — Covers setting up the dedicated Python virtual environment, managing NumPy/OpenCV and PyTorch dependencies, package structures, and running the YOLO perception node.
+
+* [VLM and YOLO 3D Target Estimation Pipeline](yolo-vlm-pipeline.md) — Explains the integration of YOLO object detections and Qwen2.5-VL for target selection, including depth calculation and TF2 frame transformations to the odom frame.
