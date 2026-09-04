@@ -380,6 +380,7 @@ yaw ≈ 0.071 rad
 indicating that the controller was also able to command rotational motion.
 
 
+
 The avigation stack:
 
 ```bash
@@ -395,3 +396,5 @@ Nav2 controller
        ↓
 Robile robot
 ```
+
+
