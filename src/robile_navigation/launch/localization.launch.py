@@ -10,13 +10,45 @@ def generate_launch_description():
     
     return LaunchDescription([
         
-        Node(
-            package='nav2_amcl',
-            executable='amcl',
-            name='amcl',
-            output='screen',
-            parameters=[nav2_yaml]
-        ),
+        # Node(
+        #     package='nav2_amcl',
+        #     executable='amcl',
+        #     name='amcl',
+        #     output='screen',
+        #     parameters=[nav2_yaml]
+        # ),
+
+        # Node(
+        #     package='nav2_amcl',
+        #     executable='amcl',
+        #     name='amcl',
+        #     output='screen',
+        #     parameters=[
+        #         nav2_yaml,
+        #         {'use_sim_time': True}
+        #     ]
+        # ),
+
+
+    Node(
+        package='nav2_amcl',
+        executable='amcl',
+        name='amcl',
+        output='screen',
+        parameters=[
+            nav2_yaml,
+            {
+                'use_sim_time': True,
+                'set_initial_pose': True,
+                'initial_pose.x': 3.0912,
+                'initial_pose.y': -3.1356,
+                'initial_pose.z': 0.0,
+                'initial_pose.yaw': -3.1338
+            }
+        ]
+    ),
+
+
 
         Node(
             package='nav2_lifecycle_manager',

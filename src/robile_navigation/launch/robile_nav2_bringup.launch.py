@@ -39,26 +39,39 @@ def generate_launch_description():
                                 {'node_names': ['map_server']}]
                     )
     
-    localization_node = Node(
-                    package='robile_navigation',
-                    executable='localization_launch.py',
-                    name='localization_launch',
-                    output='screen'
-                    )
+    localization_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                robile_nav_dir,
+                'launch',
+                'localization.launch.py'
+            )
+        )
+    )
     
-    tf2_ros = Node(
-                    package='tf2_ros',
-                    executable='static_transform_publisher',
-                    name='static_transform_publisher',
-                    arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
-                    )
+    # tf2_ros = Node(
+    #                 package='tf2_ros',
+    #                 executable='static_transform_publisher',
+    #                 name='static_transform_publisher',
+    #                 arguments=['0', '0', '0', '0', '0', '0', 'map', 'odom']
+    #                 )
     
-    navigation_node = Node(
-                    package='robile_navigation',
-                    executable='navigation_launch.py',
-                    name='localization_launch',
-                    output='screen'
-                    )
+    navigation_node = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(
+                robile_nav_dir,
+                'launch',
+                'navigation.launch.py'
+            )
+        ),
+        launch_arguments={
+            'use_sim_time': 'true',
+            'autostart': 'true',
+            'use_composition': 'False',
+            'use_respawn': 'False',
+            'log_level': 'info',
+        }.items()
+    )
     
     rviz_launch_cmd = Node(
                     package="rviz2",
@@ -71,7 +84,7 @@ def generate_launch_description():
         # rviz_launch_cmd,
         map_server,
         lifecycle_manager,
-        tf2_ros, 
-        # localization_node,
-        # navigation_node,          
+        # tf2_ros, 
+        localization_node,
+        navigation_node,          
         ])
