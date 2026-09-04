@@ -31,6 +31,7 @@ setup(
                 'yolo_node = robile_vlm_perception.yolo_node:main',
                 'vlm_node = robile_vlm_perception.vlm_node:main',
                 'depth_target_node = robile_vlm_perception.depth_target_node:main',
+                'target_navigation_node = robile_vlm_perception.target_navigation_node:main',
         ],
     },
 )
